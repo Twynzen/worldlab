@@ -1,0 +1,42 @@
+{
+  "name": "worldlab",
+  "version": "0.1.0",
+  "description": "Open-source platform for interactive 3D worlds with promptable events and learning agents",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:viewer",
+    "dev:viewer": "npm run dev --workspace=@worldlab/viewer",
+    "dev:dashboard": "npm run dev --workspace=@worldlab/dashboard",
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build --workspaces --if-present",
+    "build:apps": "npm run build --workspace=@worldlab/viewer && npm run build --workspace=@worldlab/dashboard",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist packages/*/dist"
+  },
+  "keywords": [
+    "3d",
+    "simulation",
+    "ai",
+    "reinforcement-learning",
+    "world-model",
+    "procedural-generation",
+    "three.js"
+  ],
+  "author": "Daniel",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

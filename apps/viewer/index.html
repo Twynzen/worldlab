@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorldLab Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      overflow: hidden;
+      background: #000;
+    }
+    
+    #app {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .hud {
+      position: absolute;
+      color: white;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      border-radius: 4px;
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    .hud.top-left {
+      top: 20px;
+      left: 20px;
+    }
+    
+    .hud.top-right {
+      top: 20px;
+      right: 20px;
+      text-align: right;
+    }
+    
+    .hud.bottom-left {
+      bottom: 20px;
+      left: 20px;
+    }
+    
+    .controls-hint {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.8);
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+    
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+    <div class="loading" id="loading">Initializing WorldLab...</div>
+    
+    <div class="hud top-left" id="stats" style="display: none;">
+      <div>FPS: <span id="fps">0</span></div>
+      <div>Entities: <span id="entities">0</span></div>
+      <div>Seed: <span id="seed">-</span></div>
+    </div>
+    
+    <div class="hud top-right" id="info" style="display: none;">
+      <div>WorldLab v0.1.0</div>
+      <div>Position: <span id="position">0, 0, 0</span></div>
+    </div>
+    
+    <div class="controls-hint" id="controls" style="display: none;">
+      WASD: Move | Mouse: Look | Space: Jump | Shift: Run | R: Replay | E: Event Menu
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
