@@ -1,0 +1,358 @@
+
+Informe de Investigación: @worldlab/physics
+
+Este documento presenta un análisis exhaustivo y recomendaciones estratégicas para el desarrollo del paquete @worldlab/physics. La investigación se centra en los requisitos clave del proyecto WorldLab: determinismo, rendimiento con un alto número de entidades, integración con terreno procedural y una experiencia de control de jugador robusta y receptiva.
+
+1. Selección del Motor Físico
+
+La elección del motor físico es la decisión fundamental que impactará el rendimiento, las capacidades y la mantenibilidad del paquete. Se evaluaron tres candidatos principales: cannon-es, Rapier.js y Matter.js, con base en los criterios críticos para WorldLab.
+
+1.1. Análisis Comparativo
+
+Matter.js: Este motor fue descartado tempranamente en el análisis, ya que es un motor de física exclusivamente 2D.1 Dado que WorldLab es un entorno 3D, Matter.js no es una opción viable.
+cannon-es vs. Rapier.js: La elección principal se reduce a estos dos motores 3D. Ambos son compatibles con el ecosistema de JavaScript, pero difieren significativamente en su arquitectura, rendimiento y estado de mantenimiento.
+
+Criterio
+cannon-es
+Rapier.js
+Justificación
+Determinismo
+No garantizado
+Garantizado (cross-platform)
+Rapier.js está diseñado para ser opcionalmente determinista entre plataformas, una característica crucial para el sistema de record/replay de WorldLab. Su versión JS/WASM es totalmente determinista por defecto.4
+cannon-es no ofrece esta garantía explícita.7
+Rendimiento (500-1000 entidades)
+Lento
+Muy Rápido
+Múltiples fuentes confirman que Rapier, al estar escrito en Rust y compilado a WebAssembly (WASM), es órdenes de magnitud más rápido que cannon-es.9 Con cientos de cuerpos dinámicos, la diferencia de rendimiento es crítica.
+cannon-es se considera "muy, muy lento" en comparación.9
+Soporte de Heightmaps
+Sí
+Sí
+Ambos motores tienen soporte nativo para colisionadores de tipo Heightfield, lo cual es ideal para el terreno procedural generado por @worldlab/generators.11
+Bundle Size (Tamaño del Paquete)
+Más Pequeño (~340 KB)
+Más Grande (~1.4 MB)
+cannon-es tiene una ventaja significativa en el tamaño del paquete, ya que es JavaScript puro.13 Rapier requiere un archivo WASM más grande, aunque existen compilaciones alternativas.15
+Mantenimiento y Comunidad
+En "soporte vital"
+Activamente Mantenido
+El autor original de cannon.js abandonó el proyecto hace años. La bifurcación cannon-es recibe correcciones menores pero no mejoras críticas.9 Rapier es desarrollado activamente por Dimforge y cuenta con una comunidad en crecimiento.6
+
+
+1.2. Recomendación Justificada
+
+Se recomienda encarecidamente el uso de Rapier.js.
+A pesar de su mayor tamaño de paquete, Rapier.js supera a cannon-es en los dos criterios más importantes para WorldLab: rendimiento y determinismo. La capacidad de simular de manera eficiente entre 500 y 1000 entidades es un requisito no negociable, y el rendimiento superior de Rapier es indispensable para lograrlo. Además, la garantía de determinismo multiplataforma es la única forma de implementar de manera fiable la funcionalidad de Timeline (record/replay) en @worldlab/core. El estado de mantenimiento activo de Rapier también asegura que el proyecto se construirá sobre una base sólida y con futuro.
+
+2. Arquitectura de Integración: Three.js ↔ Física
+
+La sincronización entre el mundo visual (Three.js) y el mundo físico (Rapier.js) debe ser robusta y predecible.
+
+2.1. Patrón de Sincronización
+
+Recomendación: Implementar un patrón de flujo de datos unidireccional a través del ECS (@worldlab/core).
+Flujo del Bucle de Juego: ECS → Physics → ECS → Three.js
+Sistemas de Lógica (Input, IA, etc.): Estos sistemas leen el estado del mundo desde los componentes del ECS y actualizan componentes de "intención" o propiedades físicas (ej. la velocidad deseada en un PhysicsBodyComponent).
+Sistema de Sincronización Pre-Física: Este sistema itera sobre las entidades con componentes físicos. Lee los datos del TransformComponent y PhysicsBodyComponent del ECS y los escribe en el mundo de Rapier. Este es el paso ECS → Physics.
+Paso de Física: Se ejecuta world.step(). Rapier calcula las nuevas posiciones y rotaciones.
+Sistema de Sincronización Post-Física: Este sistema lee los resultados de la simulación de Rapier y escribe las nuevas posiciones y rotaciones de vuelta en los TransformComponent del ECS. Este es el paso Physics → ECS.
+Sistema de Renderizado: El sistema de renderizado de Three.js lee los datos actualizados del TransformComponent y actualiza las mallas visuales. Este es el paso ECS → Three.js.
+Pros y Contras:
+Pros:
+Fuente Única de Verdad: El estado en los componentes del ECS es la fuente de verdad, lo que facilita la depuración y el razonamiento sobre el estado del juego.
+Desacoplamiento: Los sistemas de lógica de juego no necesitan conocer los detalles del motor de física. Solo interactúan con componentes.
+Claridad: El flujo de datos es explícito y predecible.
+Contras:
+Introduce una ligera sobrecarga en comparación con la copia directa de datos de la física al renderizado. Sin embargo, esta sobrecarga es mínima y los beneficios arquitectónicos la superan con creces.
+
+2.2. Timing del Paso de Física
+
+Recomendación: Utilizar un timestep fijo (fixed timestep).
+El determinismo es un requisito clave. Para garantizar que "mismos inputs → mismos resultados", la simulación física debe avanzar en incrementos de tiempo fijos y predecibles (ej. 60Hz o 1/60 segundos), independientemente de la tasa de fotogramas (FPS) del renderizado.17
+Determinismo vs. Suavidad: Un timestep variable (timeStep="vary") puede hacer que la animación se sienta más suave en dispositivos con FPS fluctuantes, pero sacrifica la reproducibilidad, ya que los resultados de la física pueden variar ligeramente dependiendo del deltaTime de cada fotograma.18 Para la funcionalidad de record/replay, el determinismo es más importante.
+Implementación (Pseudocódigo):
+
+JavaScript
+
+
+const FIXED_TIMESTEP = 1 / 60;
+let accumulator = 0;
+let lastTime = performance.now();
+
+function gameLoop() {
+    const newTime = performance.now();
+    const frameTime = (newTime - lastTime) / 1000;
+    lastTime = newTime;
+
+    accumulator += frameTime;
+
+    while (accumulator >= FIXED_TIMESTEP) {
+        // 1. Pre-Physics Sync (ECS -> Rapier)
+        // 2. Physics Step
+        world.step();
+        // 3. Post-Physics Sync (Rapier -> ECS)
+        accumulator -= FIXED_TIMESTEP;
+    }
+
+    // 4. Render Step (ECS -> Three.js)
+    // El renderizado puede usar un 'alpha' de interpolación para suavizar
+    // const alpha = accumulator / FIXED_TIMESTEP;
+    // renderer.render(scene, camera, alpha);
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+
+2.3. Visualización de Depuración (Debug Visualization)
+
+Rapier proporciona un método para obtener los datos de renderizado de depuración, que pueden ser dibujados fácilmente con Three.js.
+Recomendación: Crear una clase RapierDebugRenderer.
+Código de Ejemplo:
+
+JavaScript
+
+
+import * as THREE from 'three';
+import * as RAPIER from '@dimforge/rapier3d-compat';
+
+class RapierDebugRenderer {
+    constructor(scene, world) {
+        this.scene = scene;
+        this.world = world;
+        this.material = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            vertexColors: true,
+        });
+        this.geometry = new THREE.BufferGeometry();
+        this.lines = new THREE.LineSegments(this.geometry, this.material);
+        this.scene.add(this.lines);
+    }
+
+    update() {
+        const { vertices, colors } = this.world.debugRender(); // [19, 20]
+        this.geometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(vertices, 3)
+        );
+        this.geometry.setAttribute(
+            'color',
+            new THREE.BufferAttribute(colors, 4)
+        );
+        this.geometry.attributes.position.needsUpdate = true;
+        this.geometry.attributes.color.needsUpdate = true;
+    }
+}
+
+// En el bucle de juego, después de world.step():
+// debugRenderer.update();
+
+
+
+3. Sistema de Colisiones para Terreno Procedural
+
+Para un mundo generado por chunks, la eficiencia de la física del terreno es primordial.
+
+3.1. Evaluación de Opciones
+
+Opción
+Uso de Memoria (por chunk)
+Costo de Creación/Destrucción
+Precisión de Colisión
+Heightfield por Chunk
+Muy Bajo
+Muy Bajo
+Alta
+Mesh Collider (Trimesh)
+Muy Alto
+Alto
+Perfecta
+Simplified Mesh
+Medio
+Medio-Alto
+Media-Alta
+
+
+3.2. Recomendación Justificada
+
+Recomendación: Utilizar un colisionador Heightfield por cada chunk de terreno.
+Esta es la estrategia óptima para WorldLab por las siguientes razones:
+Eficiencia de Memoria: Los Heightfields son significativamente más eficientes en memoria que los Trimeshes porque solo almacenan un array 2D de alturas en lugar de una lista completa de vértices e índices.21
+Bajo Costo de Creación: Crear un Heightfield en Rapier es una operación muy rápida. Simplemente se pasa el array de alturas generado por @worldlab/generators, el número de subdivisiones y la escala.12 Esto es ideal para el streaming dinámico de chunks.
+Precisión Adecuada: Para la navegación de un jugador sobre un terreno, la precisión de un Heightfield es más que suficiente y computacionalmente más barata que las colisiones de malla.
+Trade-offs Identificados:
+La principal limitación de los Heightfields es que no pueden representar voladizos, cuevas o arcos. Si en el futuro WorldLab requiere este tipo de geometría, se podría adoptar un enfoque híbrido: usar Heightfields para la mayor parte del terreno y Trimeshes (posiblemente simplificados) para chunks específicos que contengan estas características complejas.
+
+4. Player Controller Físico
+
+La sensación de control del jugador es fundamental para la experiencia de juego.
+
+4.1. Comparación de Enfoques
+
+Criterio
+Kinematic Body (Controlador Cinemático)
+Dynamic Body (Cuerpo Dinámico)
+"Feeling" de Control
+Preciso y Responsivo
+Puede sentirse "flotante" o indirecto
+Subir Pendientes
+Controlable (con maxSlopeClimbAngle)
+Depende de la fricción y la fuerza aplicada; puede deslizarse
+Escaleras/Steps
+Soportado (con autostep)
+Propenso a engancharse o rebotar de forma extraña
+Prevención de Glitches
+Robusto (con offset para evitar atascos)
+Propenso a glitches (ser lanzado, atravesar paredes)
+
+
+4.2. Recomendación Justificada
+
+Recomendación: Implementar un Kinematic Character Controller.
+Rapier.js ofrece un controlador de personaje cinemático de alto nivel que está diseñado específicamente para este propósito.22 Este enfoque proporciona el control directo y predecible que los jugadores esperan.
+Control Directo: Un cuerpo cinemático no es afectado por fuerzas externas como la gravedad o los impactos (a menos que se programe explícitamente), lo que significa que el movimiento del jugador responde directamente a los inputs del usuario, no a una simulación física compleja.23
+Funcionalidades Específicas: El controlador de Rapier incluye soluciones integradas para los desafíos comunes del movimiento del jugador:
+maxSlopeClimbAngle: Limita el ángulo de las pendientes que el jugador puede subir, evitando que escale muros casi verticales.
+autostep: Permite al personaje subir automáticamente pequeños obstáculos como escalones o bordillos.
+offset: Mantiene un pequeño espacio entre el colisionador del personaje y la geometría del mundo para evitar que se atasque.23
+Implementación (Pseudocódigo):
+
+JavaScript
+
+
+// Inicialización
+const characterController = world.createCharacterController(0.1); // 0.1 es el offset
+characterController.setMaxSlopeClimbAngle(45 * Math.PI / 180); // 45 grados
+characterController.enableAutostep(0.5, 0.2, true); // max_height, min_width, include_dynamic_bodies
+
+// En el bucle de juego
+const desiredMovement = calculateMovementFromInput(deltaTime); // Vector de movimiento basado en WASD
+const collider = playerEntity.collider;
+
+// Mueve el personaje y calcula colisiones
+characterController.computeColliderMovement(collider, desiredMovement);
+
+const correctedMovement = characterController.computedMovement();
+const newPosition = collider.translation().add(correctedMovement);
+playerEntity.rigidBody.setNextKinematicTranslation(newPosition);
+
+
+
+5. Eventos Físicos "Promptables"
+
+Para implementar modificaciones en tiempo de ejecución basadas en texto, se necesita una API clara y validaciones robustas.
+
+5.1. API Necesaria y Implementación
+
+
+Caso de Uso
+API de Rapier.js Requerida
+Implementación Propuesta
+"Cambiar gravedad a lunar"
+world.gravity
+world.gravity = new RAPIER.Vector3(0, -1.62, 0);.25 Es crucial despertar manualmente a los cuerpos dormidos para que el cambio surta efecto.
+"Hacer que los objetos floten"
+rigidBody.setGravityScale(scale, wakeUp)
+Iterar sobre los cuerpos objetivo y llamar a body.setGravityScale(0.0, true);.25 Un valor de 0 anula la gravedad para ese cuerpo.
+"Crear explosión en punto X"
+rigidBody.applyImpulseAtPoint(impulse, point, wakeUp)
+1. Realizar una consulta de forma (shape-cast) para encontrar todos los cuerpos dentro de un radio desde el punto X. 2. Para cada cuerpo, calcular un vector de impulso que apunte desde el centro de la explosión hacia el cuerpo. 3. Llamar a body.applyImpulseAtPoint(impulseVector, body.translation(), true);.26
+
+
+5.2. Validación de Plausibilidad y Límites
+
+Un LLM no debe tener control directo y sin restricciones sobre el motor de física, ya que podría generar valores que rompan la simulación.
+Recomendación: Implementar un pipeline de Parseo → Validación → Ejecución.
+Parseo (LLM): El LLM interpreta el prompt de lenguaje natural y lo traduce a un comando estructurado (ej. JSON).
+Prompt: "Crea una explosión gigante cerca del jugador"
+Salida del LLM: { "action": "create_explosion", "params": { "position": "player", "radius": 20, "force": 500 } }
+Validación (Código del Juego): Antes de ejecutar el comando, el código del juego valida los parámetros contra un conjunto de reglas predefinidas.
+¿El valor de force (500) excede el máximo permitido (ej. 100)? Si es así, se ajusta al máximo o se rechaza.
+¿La position es un lugar válido?
+Este paso es crucial para la estabilidad y evita que el LLM introduzca valores extremos que causen inestabilidad numérica (objetos que atraviesan paredes o salen disparados al infinito).
+Ejecución (Código del Juego): Si la validación es exitosa, el código del juego ejecuta la acción utilizando las APIs de Rapier.
+Este enfoque aprovecha la capacidad de interpretación del LLM mientras mantiene la robustez y seguridad de la simulación a través de reglas codificadas.27
+
+6. Optimización y Límites
+
+Para mundos grandes, la optimización es clave para mantener un rendimiento aceptable.
+
+6.1. Estrategias Evaluadas
+
+Spatial Partitioning (Particionamiento Espacial): Rapier maneja esto internamente a través de su fase amplia (broad-phase). No requiere implementación por parte del usuario.
+Sleep/Wake (Dormir/Despertar Cuerpos): Rapier implementa esto automáticamente. Los cuerpos dinámicos que dejan de moverse entran en un estado de "sueño" y no consumen recursos de CPU hasta que son despertados por una colisión u otra interacción.28
+LOD Físico: No es una característica nativa de Rapier. Requeriría una implementación manual para intercambiar colisionadores complejos por otros más simples a distancia (ej. Trimesh → Cuboid). Es una técnica avanzada.30
+Chunk-based Activation (Activación por Chunks): Esta es una estrategia a nivel de aplicación. Consiste en añadir al mundo físico de Rapier únicamente los cuerpos de los chunks que están dentro de un cierto radio alrededor del jugador, y eliminarlos cuando el jugador se aleja.
+
+6.2. Recomendación de Implementación
+
+Para la v1:
+Confiar en las optimizaciones de Rapier: Aprovechar al máximo el sistema automático de sleep/wake.
+Implementar la activación por chunks: Esta es la optimización más importante para WorldLab. Solo los chunks activos deben tener sus cuerpos físicos en la simulación de Rapier.
+Para Optimizaciones Futuras:
+LOD Físico: Si los benchmarks revelan que el rendimiento sigue siendo un problema incluso con la activación por chunks (por ejemplo, en una ciudad con miles de objetos dinámicos visibles), se podría considerar la implementación de un sistema de LOD físico.
+
+7. Testing y Validación
+
+Para un sistema determinista, las pruebas son esenciales para garantizar la consistencia.
+
+7.1. Estrategias de Prueba
+
+Recomendación: Utilizar el sistema de snapshots de Rapier para "Golden Tests".
+Rapier permite serializar el estado completo del mundo físico a un array de bytes y restaurarlo, lo cual es perfecto para pruebas de regresión deterministas.4
+Implementación de Golden Tests:
+Crear un Escenario de Prueba: Configurar una escena con una disposición inicial específica de cuerpos y velocidades.
+Ejecutar la Simulación: Avanzar la simulación un número fijo de pasos con un timestep fijo.
+Generar el "Golden File": Al final de la simulación, llamar a world.createSnapshot() y guardar el Uint8Array resultante en un archivo (ej. test_scene_01.golden). Este archivo se versiona con el código.
+Crear el Test Automatizado:
+El test carga el escenario inicial.
+Ejecuta la simulación por el mismo número de pasos.
+Genera un nuevo snapshot.
+Compara byte por byte el nuevo snapshot con el "golden file" cargado.
+Si hay alguna diferencia, el test falla, indicando una regresión que ha roto el determinismo.
+Detección de Regresiones:
+Estos "Golden Tests" deben integrarse en el pipeline de Integración Continua (CI). Cualquier cambio en el código que altere el comportamiento de la física (incluso de forma no intencionada) será detectado inmediatamente por los tests fallidos.
+
+7.2. Benchmarks de Rendimiento
+
+Recomendación: Crear un benchmark automatizado para monitorear el rendimiento de la simulación.
+Métricas Clave a Monitorear:
+Tiempo de Paso (Step Time): La métrica más importante. Mide el tiempo que tarda en ejecutarse world.step().
+Pasos por Segundo (Steps/sec): Calculado a partir del tiempo de paso, indica cuántas simulaciones completas se pueden ejecutar por segundo.
+Número de Cuerpos Activos: Un buen indicador de la carga de trabajo del motor de física en un momento dado.
+Implementación del Benchmark:
+Crear una escena de prueba con un número representativo de entidades (ej. 1000 cajas cayendo sobre un terreno de Heightfield).
+Ejecutar la simulación durante un número determinado de fotogramas (ej. 1000).
+En cada fotograma, medir el tiempo de world.step() usando performance.now().
+Calcular y registrar las métricas promedio (tiempo de paso, steps/sec) y el número de cuerpos activos.
+Integrar este benchmark en la CI para detectar caídas de rendimiento en cada cambio de código.
+Fuentes citadas
+[AskJS] What is your favorite JavaScript physics library? - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/javascript/comments/lc7q31/askjs_what_is_your_favorite_javascript_physics/
+Best JavaScript and HTML5 game engines (updated for 2025) - LogRocket Blog, acceso: septiembre 14, 2025, https://blog.logrocket.com/best-javascript-html5-game-engines-2025/
+Matter.js - a 2D rigid body JavaScript physics engine · code by @liabru - brm·io, acceso: septiembre 14, 2025, https://brm.io/matter-js/
+Determinism - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/templates_injected/determinism/
+Determinism | Rapier - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/determinism/
+About Rapier | Rapier - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/
+Determinism | ruiper.es, acceso: septiembre 14, 2025, https://ruiper.es/posts/determinism/
+Causal Determinism - Stanford Encyclopedia of Philosophy, acceso: septiembre 14, 2025, https://plato.stanford.edu/archives/fall2014/entries/determinism-causal/
+Canon or Rapier? : r/threejs - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/threejs/comments/1j2ylcw/canon_or_rapier/
+Rapier vs Cannon performance? - Questions - three.js forum, acceso: septiembre 14, 2025, https://discourse.threejs.org/t/rapier-vs-cannon-performance/53475
+cannon.js - Heightfield demo, acceso: septiembre 14, 2025, https://pmndrs.github.io/cannon-es/examples/heightfield
+Heightfield | @dimforge/rapier3d, acceso: septiembre 14, 2025, https://rapier.rs/javascript3d/classes/Heightfield.html
+Preferred physics engine (cannon.js, ammo.js, DIY...) - three.js forum, acceso: septiembre 14, 2025, https://discourse.threejs.org/t/preferred-physics-engine-cannon-js-ammo-js-diy/1565
+cannon-es - UNPKG, acceso: septiembre 14, 2025, https://app.unpkg.com/cannon-es@0.6.3
+dimforge/rapier3d - NPM, acceso: septiembre 14, 2025, https://www.npmjs.com/package/@dimforge/rapier3d
+Issue #115 · pmndrs/react-three-rapier - Wasm build - GitHub, acceso: septiembre 14, 2025, https://github.com/pmndrs/react-three-rapier/issues/115
+cannon-es - GitHub Pages, acceso: septiembre 14, 2025, https://pmndrs.github.io/cannon-es/docs/
+Using Three.js, and Rapier physics: Why does this object have a jitter on moving?, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/79347414/using-three-js-and-rapier-physics-why-does-this-object-have-a-jitter-on-moving
+Colliders | Rapier - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/colliders/
+Character controller - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/bevy_plugin/character_controller/
+Character controller - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/character_controller/
+Typically are kinematic or dynamic character controllers used? I have to write my own and would appreciate if someone with experience could explain the tradeoffs : r/gamedev - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/gamedev/comments/1egqc0f/typically_are_kinematic_or_dynamic_character/
+rigid_body_gravity | Rapier - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/rigid_body_gravity/
+rigid_body_forces_and_impulses | Rapier, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/rigid_body_forces_and_impulses/
+PANGeA: Procedural Artificial Narrative using Generative AI ... - arXiv, acceso: septiembre 14, 2025, https://arxiv.org/pdf/2404.19721
+rigid_body_sleeping - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/templates/rigid_body_sleeping/
+rigid_body_sleeping | Rapier - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/javascript/rigid_body_sleeping/
+Rigid-bodies - Rapier physics engine, acceso: septiembre 14, 2025, https://rapier.rs/docs/user_guides/templates/rigid_bodies

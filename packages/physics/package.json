@@ -1,0 +1,19 @@
+{
+  "name": "@worldlab/physics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d": "^0.11.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

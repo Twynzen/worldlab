@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorldLab Simple Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: white;
+        }
+        #app {
+            width: 800px;
+            height: 600px;
+            border: 2px solid #333;
+            margin: 20px auto;
+        }
+        #status {
+            text-align: center;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">🔄 Cargando WorldLab Test...</div>
+    <div id="app"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        document.getElementById('status').innerHTML = '✅ THREE.js cargado correctamente';
+
+        // Test básico de Three.js
+        const container = document.getElementById('app');
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+
+        const camera = new THREE.PerspectiveCamera(75, 800/600, 0.1, 1000);
+        camera.position.set(0, 5, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(800, 600);
+        container.appendChild(renderer.domElement);
+
+        // Crear un cubo que rota
+        const geometry = new THREE.BoxGeometry();
+        const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+        const cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);
+
+        // Luces
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+
+        // Render loop
+        function animate() {
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        document.getElementById('status').innerHTML = '🎮 WorldLab Test - ¡Cubo verde rotando! Sistema funcional';
+        console.log('✅ WorldLab Test - Three.js working perfectly!');
+    </script>
+</body>
+</html>

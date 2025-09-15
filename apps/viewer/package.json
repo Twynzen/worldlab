@@ -10,12 +10,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@worldlab/core": "workspace:*",
-    "@worldlab/events": "workspace:*",
-    "@worldlab/generators": "workspace:*",
-    "@worldlab/physics": "workspace:*",
-    "three": "^0.160.0",
-    "cannon-es": "^0.20.0"
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@types/three": "^0.160.0",

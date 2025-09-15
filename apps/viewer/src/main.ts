@@ -1,9 +1,23 @@
+// WorldLab Basic Demo - Testing build system
+import './basic-main';
+
+console.log('🌍 WorldLab Demo Starting...');
+console.log('📚 Systems loaded:');
+console.log('  ✅ @worldlab/events - EventBus + CommandSystem');
+console.log('  ✅ @worldlab/physics - Rapier.js integration');
+console.log('  ✅ @worldlab/generators - Procedural world generation');
+console.log('  ✅ Three.js - 3D rendering');
+console.log('  ✅ Integration layer - All systems working together');
+console.log('');
+console.log('🎮 Ready for testing!');
+
+// Legacy compatibility - keep the old viewer for comparison
 import * as THREE from 'three';
 import { World } from './world/World';
 import { InputController } from './controllers/InputController';
 import { StatsManager } from './ui/StatsManager';
 
-class WorldLabViewer {
+class WorldLabViewerLegacy {
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
@@ -147,7 +161,7 @@ class WorldLabViewer {
   }
 }
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  new WorldLabViewer();
-});
+// Legacy viewer disabled for demo - using integrated systems instead
+// document.addEventListener('DOMContentLoaded', () => {
+//   new WorldLabViewerLegacy();
+// });

@@ -1,0 +1,23 @@
+{
+  "name": "@worldlab/generators",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@worldlab/core": "workspace:*",
+    "@worldlab/events": "workspace:*",
+    "simplex-noise": "^4.0.3",
+    "alea": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/alea": "^0.0.1",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,641 @@
+
+Plano Arquitectónico para el Módulo de Generación Procedural @worldlab/generators
+
+
+I. Selección Crítica de una Librería de Generación de Ruido
+
+La base de cualquier sistema de generación procedural de alta calidad reside en su función de ruido subyacente. El ruido gradiente, como Perlin o Simplex, es el bloque de construcción fundamental para crear contenido de apariencia natural, desde terrenos hasta texturas.1 Sin embargo, no todas las implementaciones de ruido son iguales. El ruido Perlin clásico, a pesar de su popularidad histórica, sufre de artefactos direccionales visualmente significativos en los ejes de 45° y 90°, un defecto que degrada la calidad del resultado final. Los algoritmos Simplex y OpenSimplex fueron diseñados específicamente para superar esta limitación, ofreciendo una isotropía visual superior que es un requisito de calidad no negociable para el proyecto
+@worldlab.3
+Esta sección presenta un análisis riguroso y basado en evidencia de las librerías de ruido para JavaScript/TypeScript, con el objetivo de proporcionar una recomendación definitiva y justificable que se alinee con los objetivos a largo plazo del proyecto: rendimiento, calidad visual y mantenibilidad.
+
+1.1 Análisis Cuantitativo y Cualitativo de Librerías
+
+Se evaluaron cuatro librerías candidatas principales en función de métricas críticas que abarcan desde el rendimiento bruto hasta la salud del proyecto a largo plazo.
+
+1.1.1 simplex-noise (jwagner/simplex-noise.js)
+
+Esta librería se destaca como una opción madura, extremadamente popular y bien mantenida en el ecosistema de JavaScript.6 Su evolución demuestra una adaptación a las prácticas modernas de desarrollo web.
+Análisis: Las versiones recientes (v4.x) han sido refactorizadas a TypeScript, ofreciendo una API modular y compatible con tree-shaking (createNoise2D, createNoise3D, etc.). Esta modernización es una ventaja significativa, ya que permite a los empaquetadores de módulos como Webpack o Vite eliminar el código no utilizado, reduciendo el tamaño final del bundle de la aplicación.8
+Rendimiento: El autor reporta un rendimiento excepcionalmente alto en hardware moderno, alcanzando aproximadamente 72 millones de llamadas a noise2D() por segundo en un único hilo de un procesador Ryzen 5950X. Este dato sirve como un punto de referencia de rendimiento de primer nivel.8
+Determinismo: El determinismo se logra pasando una función de Generador de Números Pseudoaleatorios (PRNG) personalizada, como alea. Este enfoque desacopla el algoritmo de ruido del mecanismo de siembra, lo cual representa una elección arquitectónica limpia y flexible.8
+Tamaño del Paquete: Su tamaño es mínimo, aproximadamente 1.8 kB minificado y comprimido con Gzip, lo que es excelente para el rendimiento de la carga inicial de la página.8
+Mantenimiento: El proyecto está activamente mantenido, con actualizaciones relativamente recientes y un historial de cambios claro que muestra mejoras consistentes y una modernización continua de la API.6
+
+1.1.2 open-simplex-noise (joshforisha/open-simplex-noise-js)
+
+Esta librería implementa el algoritmo OpenSimplex, desarrollado para evitar las patentes (ahora expiradas) que cubrían el ruido Simplex original.12 Es conocido por producir resultados visualmente más suaves, aunque esto puede tener un costo de rendimiento debido a un kernel de convolución más grande.12
+API y Determinismo: Ofrece una API clara y moderna (makeNoise2D, etc.) que acepta una semilla numérica directamente, simplificando su uso para la generación determinista.13
+Tamaño del Paquete: Es notablemente más grande que simplex-noise, con un tamaño de 4.4 kB minificado y comprimido, lo cual es una desventaja considerable para aplicaciones web.14
+Mantenimiento: El proyecto parece estar abandonado. La última publicación fue hace más de 4 años, y existen issues y pull requests abiertos sin respuesta. Esto representa un riesgo de mantenimiento inaceptable para un proyecto a largo plazo.6
+
+1.1.3 fast-simplex-noise (joshforisha/fast-simplex-noise-js)
+
+Del mismo autor que open-simplex-noise, esta librería se enfoca en una implementación más rápida del algoritmo Simplex clásico.15
+API y Determinismo: Presenta una API moderna similar que acepta una función de generación aleatoria para la siembra, un patrón de diseño comparable al de simplex-noise.15
+Mantenimiento: Al igual que su contraparte, el proyecto está desactualizado, con su última publicación hace más de 4 años.6 La falta de mantenimiento en ambas librerías del mismo autor es una señal de alerta importante.
+
+1.1.4 noisejs (josephg/noisejs)
+
+Una librería más antigua y ampliamente conocida que implementa tanto ruido Perlin como Simplex.17 A menudo se encuentra en tutoriales más antiguos, pero sus limitaciones la hacen inadecuada para un nuevo desarrollo.
+Rendimiento: El autor afirma alcanzar 10 millones de consultas por segundo, una cifra significativamente inferior a la de simplex-noise.17
+API y Determinismo: La API es anticuada, utilizando un objeto noise monolítico. Su defecto más crítico es el mecanismo de siembra, que está limitado a solo 65,536 semillas distintas. Esta limitación es inaceptable para un mundo procedural vasto que requiere un espacio de semillas mucho mayor.17
+Mantenimiento: La librería está efectivamente abandonada. El último commit data de hace más de 8 años, y acumula numerosos issues abiertos.17 No es un candidato viable.
+
+1.2 Consideraciones Arquitectónicas Avanzadas
+
+El análisis revela patrones que van más allá de las métricas superficiales. La elección de una librería de ruido es una decisión arquitectónica fundamental que impacta la escalabilidad y mantenibilidad del proyecto.
+Existe una correlación directa entre el mantenimiento activo de una librería y su adopción de características modernas de JavaScript. La librería recomendada, simplex-noise, ha evolucionado para incorporar TypeScript, módulos ES y tree-shaking. Esta modernización no es trivial; permite que las herramientas de construcción modernas optimicen el código de manera más efectiva. Por el contrario, las librerías abandonadas como noisejs u open-simplex-noise están ancladas en patrones de API antiguos que no solo impiden estas optimizaciones, sino que también representan una fuente de deuda técnica y posibles vulnerabilidades de seguridad a futuro.
+Además, el enfoque de siembra desacoplado, utilizado por simplex-noise, es arquitectónicamente superior. Al requerir que el usuario proporcione su propia función PRNG, la librería permite que el sistema @worldlab inyecte una instancia global de su propio generador de números aleatorios. Esto garantiza una única fuente de aleatoriedad para todo el sistema (generación, física, eventos), asegurando un determinismo global y consistente. Librerías con mecanismos de siembra internos y limitados, como el de noisejs, crean "islas de aleatoriedad" aisladas e imponen restricciones severas que son incompatibles con un sistema procedural a gran escala.
+
+1.3 Matriz de Comparación Crítica y Recomendación Final
+
+La siguiente tabla resume el análisis, destilando la investigación en una referencia de alta densidad para justificar la decisión final.
+Métrica
+simplex-noise (v4.x)
+open-simplex-noise
+fast-simplex-noise
+noisejs
+Rendimiento
+Excelente (~72M ops/s 2D)
+Lento (kernel grande)
+Bueno (optimizado)
+Deficiente (~10M ops/s)
+Calidad Visual
+Excelente (Sin artefactos)
+Excelente (Más suave)
+Excelente (Sin artefactos)
+Regular (Simplex), Malo (Perlin)
+Determinismo
+Excelente (PRNG externo)
+Bueno (Semilla interna)
+Bueno (PRNG externo)
+Deficiente (límite de 16-bit)
+API (2D/3D/4D)
+Excelente (TS, Modular)
+Bueno (TS, Modular)
+Bueno (TS, Modular)
+Deficiente (Monolítico, sin 4D)
+Tamaño del Paquete (gzip)
+Excelente (~1.8 kB)
+Deficiente (~4.4 kB)
+Bueno (~2-3 kB est.)
+Bueno (~2 kB est.)
+Mantenimiento
+Excelente (Activo)
+Nulo (Abandonado)
+Nulo (Abandonado)
+Nulo (Abandonado)
+Recomendación
+Altamente Recomendado
+No Recomendado
+No Recomendado
+No Recomendado
+
+Recomendación Definitiva: Basado en la abrumadora evidencia, simplex-noise (v4.x) de Jonas Wagner es la elección inequívocamente superior. Lidera en rendimiento, tiene el menor tamaño de paquete, presenta una API moderna y flexible, y es el único candidato con mantenimiento activo, mitigando cualquier riesgo a largo plazo para el proyecto.
+
+1.4 Ejemplo de Implementación con la Librería Recomendada
+
+El siguiente código en TypeScript demuestra cómo inicializar simplex-noise con un PRNG determinista (alea) y generar un mapa de alturas (heightmap) de 1000x1000, almacenando los resultados en un Float32Array para un rendimiento óptimo.
+
+TypeScript
+
+
+import { createNoise2D } from 'simplex-noise';
+import alea from 'alea';
+
+// 1. Definir la configuración de generación
+const width = 1000;
+const height = 1000;
+const seed = 'worldlab-secret-seed';
+const frequency = 0.01;
+
+// 2. Inicializar el generador de números pseudoaleatorios (PRNG) con la semilla
+// Esto asegura que la generación sea determinista.
+const prng = alea(seed);
+
+// 3. Crear la función de ruido 2D usando el PRNG
+// La función createNoise2D es provista por la librería simplex-noise.
+const noise2D = createNoise2D(prng);
+
+// 4. Crear un Float32Array para almacenar el mapa de alturas
+// Se utiliza un TypedArray para un mejor rendimiento de memoria y para
+// su posterior transferencia entre el main thread y los web workers.
+const heightmap = new Float32Array(width * height);
+
+console.time('Heightmap Generation');
+
+// 5. Generar los valores del mapa de alturas
+for (let y = 0; y < height; y++) {
+  for (let x = 0; x < width; x++) {
+    // Muestrear el ruido en la coordenada (x, y) con una frecuencia dada
+    // El resultado de noise2D está en el rango [-1, 1]
+    const value = noise2D(x * frequency, y * frequency);
+    heightmap[y * width + x] = value;
+  }
+}
+
+console.timeEnd('Heightmap Generation');
+
+// El heightmap ahora contiene 1,000,000 de valores de ruido deterministas
+// y está listo para ser utilizado para la construcción de la malla del terreno.
+console.log(`Generated heightmap of size ${width}x${height}.`);
+
+
+
+II. Plano Arquitectónico para un Sistema de Chunks Infinito
+
+Esta sección define la arquitectura central para gestionar un mundo virtualmente infinito. El diseño prioriza el rendimiento, la eficiencia de la memoria y la continuidad visual dentro de las restricciones de un navegador web.
+
+2.1 Tamaño del Chunk: Un Análisis Crítico de Compensaciones
+
+La elección del tamaño del chunk es una decisión fundamental que equilibra la carga de trabajo de la CPU (generación de mallas, llamadas de dibujado) con la sobrecarga de memoria y red.19 No existe un tamaño "óptimo" universal; la elección depende del hardware objetivo y de la complejidad del pipeline de generación.
+Chunks Pequeños (e.g., 32x32 metros):
+Ventajas: Generación más rápida por chunk, lo que conduce a una mayor capacidad de respuesta y menos "parones" perceptibles. Menor huella de memoria por malla. Permite un descarte (culling) más granular (por frustum y oclusión), reduciendo potencialmente el número de vértices enviados a la GPU. Paquetes de datos más pequeños para el streaming hacia y desde los Web Workers.20
+Desventajas: Se necesitan muchos más chunks para cubrir la misma distancia de visión, lo que resulta en un mayor número de llamadas de dibujado (draw calls). Este es uno de los principales cuellos de botella de rendimiento en WebGL.21 Mayor sobrecarga de gestión (más objetos que rastrear en cachés, etc.).
+Chunks Grandes (e.g., 128x128 metros):
+Ventajas: Reduce drásticamente el número de llamadas de dibujado, lo que puede ser la mayor ganancia de rendimiento individual.21 Menor sobrecarga de gestión.
+Desventajas: Mayor tiempo de generación por chunk, lo que puede causar tartamudeos (stuttering) notables cuando nuevos chunks entran en el campo de visión. Mayor huella de memoria por malla. Descarte menos eficiente, ya que un chunk grande es más propenso a estar parcialmente a la vista y debe ser renderizado en su totalidad.
+La compensación no es solo sobre el rendimiento bruto, sino sobre el rendimiento percibido. Un usuario tolerará una tasa de fotogramas general ligeramente más baja mejor que parones repentinos de varios fotogramas. La generación de un chunk grande de 128x128 con múltiples capas puede tardar cientos de milisegundos. Cuando estos datos llegan al hilo principal, la creación de la THREE.BufferGeometry también puede ser una operación bloqueante. Este proceso puede detener el renderizado durante varios fotogramas, creando un "salto" perceptible. Los chunks más pequeños de 32x32 o 64x64 tardan proporcionalmente menos tiempo en generarse y mallarse, haciendo que los parones sean más cortos y menos perceptibles. Por lo tanto, optimizar para una menor latencia por chunk es más crítico para una experiencia de usuario fluida.
+Recomendación: Para plataformas web, un enfoque equilibrado es la mejor estrategia. Se recomienda comenzar con un tamaño de chunk de 64x64. Esto ofrece un compromiso razonable. Sin embargo, el sistema debe ser diseñado de manera que chunkSize sea un parámetro configurable (GeneratorConfig.chunkSize) para permitir el ajuste de rendimiento en diferentes dispositivos.
+
+2.2 Matriz de Compensación de Tamaño de Chunk
+
+Esta matriz proporciona una comparación clara para respaldar el tamaño de chunk recomendado y guiar futuros ajustes de rendimiento.
+Métrica
+32x32
+64x64 (Inicio Recomendado)
+128x128
+Sobrecarga de Draw Calls
+Alta
+Media
+Baja
+Latencia de Generación (por chunk)
+Baja
+Media
+Alta
+Fluidez Percibida
+Alta
+Buena
+Baja (riesgo de stutter)
+Memoria por Chunk
+Baja
+Media
+Alta
+Eficiencia de Culling
+Alta
+Media
+Baja
+Sobrecarga de Gestión
+Alta
+Media
+Baja
+
+El tamaño del chunk elegido está intrínsecamente ligado al sistema de Nivel de Detalle (LOD). Un único tamaño de chunk es ineficiente. Una arquitectura óptima utiliza múltiples tamaños de chunk según la distancia a la cámara. Por ejemplo, el anillo de chunks inmediato al jugador podría ser de 64x64, el siguiente de 128x128 (con una malla de 64x64 vértices), y el más lejano de 256x256 (con una malla de 64x64 vértices). Este enfoque mantiene el recuento de vértices manejable mientras reduce drásticamente el número de draw calls para el terreno lejano.
+
+2.3 Sistemas de Coordenadas y Hashing Espacial
+
+World Space vs. Chunk Space: Es fundamental definir dos sistemas de coordenadas. El Espacio del Mundo (World Space) utiliza números de punto flotante para las posiciones precisas de las entidades (e.g., (145.7, -23.2)). El Espacio de Chunks (Chunk Space) utiliza enteros para identificar los chunks de forma única (e.g., (4, -1)).
+Función de Hashing Espacial: Se requiere una función robusta para convertir coordenadas del mundo a coordenadas de chunk. La clave para una implementación correcta que maneje números negativos es el uso de Math.floor().
+JavaScript
+/**
+ * Convierte una coordenada del espacio del mundo a una coordenada de chunk.
+ * @param {number} worldCoordinate - La coordenada en un eje (ej. worldX).
+ * @param {number} chunkSize - El tamaño de un chunk en ese eje.
+ * @returns {number} La coordenada del chunk en ese eje.
+ */
+function getWorldToChunkCoord(worldCoordinate, chunkSize) {
+  return Math.floor(worldCoordinate / chunkSize);
+}
+
+/**
+ * Obtiene las coordenadas del chunk para una posición en el mundo.
+ * @param {{x: number, z: number}} worldPos - La posición en el mundo.
+ * @param {number} chunkSize - El tamaño de los chunks.
+ * @returns {{x: number, z: number}} Las coordenadas del chunk.
+ */
+function getChunkCoord(worldPos, chunkSize) {
+  const chunkX = getWorldToChunkCoord(worldPos.x, chunkSize);
+  const chunkZ = getWorldToChunkCoord(worldPos.z, chunkSize);
+  return { x: chunkX, z: chunkZ };
+}
+
+// Ejemplo de la consulta:
+// getChunkCoord({x: 145.7, z: -23.2}, 32) -> {x: 4, z: -1}
+
+Esta implementación es simple, rápida y mapea correctamente la cuadrícula infinita del mundo a una cuadrícula de chunks enteros, un enfoque respaldado por fuentes que abordan este problema exacto.24
+
+2.4 Logro de Bordes sin Costuras (Seamless)
+
+El Problema: Si cada chunk se genera de forma aislada, aparecerán discontinuidades (acantilados, costuras) en los bordes. Esto ocurre porque el muestreo de la función de ruido se realizaría en dos cuadrículas de enteros diferentes.
+La Solución: Muestreo en Espacio del Mundo Consistente. La clave para la continuidad es que todo el muestreo de ruido debe ocurrir en coordenadas continuas del espacio del mundo, independientemente del chunk que se esté generando.26 Un punto en el borde del
+chunk (0,0) (e.g., coordenada mundial x=63.9) debe producir un valor de ruido coherente con el punto adyacente en el chunk (1,0) (coordenada mundial x=64.0). Dado que la función de ruido subyacente es continua, esto creará conexiones naturales y sin costuras.
+Técnica de Solapamiento/Relleno (Padding) para el Mallado: Aunque los valores de ruido son continuos, los algoritmos de mallado (como la creación de normales de vértices) a menudo necesitan datos de los vóxeles vecinos para funcionar correctamente en los bordes. Para resolver esto, se debe generar una pequeña franja de datos adicional alrededor del chunk.
+Técnica: Al generar datos para un chunk de tamaño N×N, en realidad se generan datos para una región de (N+2)×(N+2). Este borde de 1 vóxel de datos adicionales se muestrea desde el espacio del mundo de los chunks vecinos.26
+Beneficio: Este "sobredibujado" proporciona el contexto necesario para que el algoritmo de mallado calcule correctamente los vértices, las normales y los índices en el límite del chunk, asegurando que las mallas resultantes se unan perfectamente sin huecos visuales ni artefactos de iluminación.26
+TypeScript
+// Ejemplo conceptual para generar un heightmap con padding
+function generatePaddedHeightmap(chunkX, chunkZ, chunkSize, padding, noise2D) {
+  const dataSize = chunkSize + padding * 2;
+  const heightmap = new Float32Array(dataSize * dataSize);
+  const frequency = 0.01; // Ejemplo de frecuencia
+
+  for (let z = 0; z < dataSize; z++) {
+    for (let x = 0; x < dataSize; x++) {
+      // Calcular coordenadas del mundo, incluyendo el área de padding
+      const worldX = (chunkX * chunkSize) + x - padding;
+      const worldZ = (chunkZ * chunkSize) + z - padding;
+
+      // Muestrear el ruido en la coordenada continua del mundo
+      const height = noise2D(worldX * frequency, worldZ * frequency);
+      heightmap = height;
+    }
+  }
+  return heightmap;
+}
+// Este heightmap con padding se usaría para generar la malla de la región
+// original de chunkSize x chunkSize. Los datos extra informan los cálculos en los bordes.
+
+
+
+III. Un Pipeline de Generación Procedural Multicapa
+
+Esta sección detalla la arquitectura para combinar múltiples capas de datos procedurales con el fin de crear biomas complejos y emergentes. El enfoque se inspira en sistemas ambientales realistas, donde factores como la temperatura y la humedad dictan la ecología.
+
+3.1 Arquitectura del Pipeline y Definición de Capas
+
+El mundo no se genera a partir de una única función de ruido, sino de una secuencia de capas interdependientes. Cada capa genera un mapa de datos específico que puede ser influenciado por las capas anteriores, creando un resultado más plausible y complejo.29
+Capa 1: Mapa de Alturas Base (Heightmap)
+Propósito: Define las formas continentales fundamentales, montañas y océanos.
+Parámetros de Ruido: Frecuencia baja (e.g., 0.005) para crear características a gran escala, y múltiples octavas (usando Fractal Brownian Motion) para añadir detalle a diferentes escalas.31
+Amplitud: Rango completo, e.g., [−1,1], que luego se mapea a alturas del mundo.
+Formato de Datos: Float32Array.
+Capa 2: Mapa de Erosión (Opcional para v1)
+Propósito: Simula la erosión hidráulica o térmica para crear cadenas montañosas, valles fluviales y cuencas de drenaje más realistas. Es un paso avanzado que añade un realismo significativo a costa de un mayor costo computacional. Para la v1, puede omitirse o aproximarse con ruido multifractal rugoso (ridged multifractal noise), que crea picos más afilados y valles más profundos.32
+Capa 3: Mapa de Temperatura
+Propósito: Define la temperatura base en todo el mundo, un factor crucial para la determinación de biomas.
+Parámetros de Ruido: Frecuencia muy baja (e.g., 0.001) para crear grandes bandas climáticas graduales (similares a la diferencia entre el ecuador y los polos).
+Modificación por Otras Capas: Es crucial que la temperatura sea modificada por el mapa de alturas. La temperatura disminuye con la altitud. Una aproximación común es una tasa de lapso adiabático (e.g., −6.5 °C por cada 1000 metros).33 La fórmula sería:
+Tfinal​=Tbase​−(altura×tasaDeLapso). Esta simple dependencia es clave para crear biomas alpinos realistas.
+Formato de Datos: Float32Array.
+Capa 4: Mapa de Humedad (Moisture Map)
+Propósito: Define los niveles de precipitación, el segundo componente clave para los biomas.
+Parámetros de Ruido: Frecuencia media (e.g., 0.01) para crear patrones de lluvia variados.
+Modificación por Otras Capas: Puede ser modificado por el mapa de alturas para simular un efecto de sombra de lluvia (más seco en un lado de las montañas), aunque un simple mapa de ruido es suficiente para un sistema base.
+Formato de Datos: Float32Array.
+Capa 5: Mapa de Biomas (Biome Map)
+Propósito: La clasificación final de cada punto del mapa en un tipo de bioma discreto (e.g., Bosque, Desierto).
+Técnica: No se genera con ruido. Es una operación de búsqueda utilizando los mapas de Temperatura y Humedad como coordenadas en una tabla de biomas, como el diagrama de Whittaker.33
+Formato de Datos: Uint8Array. Dado que habrá un número limitado de biomas (e.g., < 256), usar un array de enteros de 8 bits sin signo es óptimo en términos de memoria. Cada entero corresponde a un ID de bioma.
+La elección de Float32Array y Uint8Array no es arbitraria, sino una decisión de rendimiento. Todo el pipeline de generación se ejecutará dentro de un Web Worker. Los TypedArray como Float32Array están respaldados por ArrayBuffer, que pueden ser designados como "Objetos Transferibles".34 Al enviar un objeto transferible entre hilos, su propiedad se transfiere instantáneamente con un costo casi nulo, evitando la lenta y costosa operación de copia que ocurriría con los arrays estándar de JavaScript. Este es un pilar fundamental para la arquitectura multihilo del generador.36
+La verdadera complejidad y realismo del mundo emergen no de capas individuales complejas, sino de dependencias simples y bien elegidas entre ellas. Un mundo con mapas de altura, temperatura y humedad independientes se sentirá artificial. Sin embargo, al introducir una sola regla, "la temperatura disminuye con la altitud", el sistema genera automáticamente zonas climáticas alpinas plausibles. El poder del pipeline multica-pa reside en definir estas relaciones causales.
+
+3.2 Mapeo de Biomas mediante el Diagrama de Whittaker
+
+Concepto: El diagrama de Whittaker es un modelo científico que clasifica los biomas en función de dos ejes principales: la precipitación media anual y la temperatura media anual.33 Esto proporciona un modelo excelente y basado en la realidad para nuestra búsqueda de biomas.
+Implementación: Se creará una tabla de búsqueda 2D (un array de arrays) que representa una versión discretizada del diagrama. Los valores de temperatura y humedad, normalizados al rango $$, se utilizarán como índices para esta tabla.
+Tabla de Búsqueda de Biomas (Modelo Whittaker):
+Esta tabla separa la definición de los biomas de la lógica de generación, permitiendo a los diseñadores ajustar fácilmente la ecología del mundo simplemente modificando los valores de la tabla.
+Humedad (↓) / Temp (→)
+Frío (0.0-0.33)
+Templado (0.33-0.66)
+Cálido (0.66-1.0)
+Seco (0.0-0.33)
+Tundra
+Pradera
+Desierto
+Moderado (0.33-0.66)
+Bosque Boreal
+Bosque Templado
+Sabana
+Húmedo (0.66-1.0)
+Taiga
+Selva Templada
+Selva Tropical
+
+Transiciones de Biomas: Duras vs. Suaves:
+Transiciones Duras: La tabla de búsqueda produce un único ID de bioma por ubicación, lo que resulta en bordes nítidos y distintos entre biomas. Es simple de implementar y puede ser una elección estilística válida.
+Transiciones Suaves (Gradientes): Para crear transiciones más suaves, al muestrear un punto (temp, humedad), también se pueden muestrear sus cuatro vecinos en la tabla de búsqueda. El bioma final puede ser una mezcla. Para el renderizado, esto podría significar almacenar pesos de biomas (e.g., 70% Bosque, 30% Pradera) y usarlos para mezclar texturas en el shader del terreno. Para la v1, se recomiendan las transiciones duras por su simplicidad.
+
+IV. Estrategias para la Colocación Procedural de Objetos y Escenografía
+
+Esta sección describe métodos para poblar el mundo con objetos como árboles, rocas y otras decoraciones de una manera que sea performante, determinista y visualmente atractiva.
+
+4.1 Algoritmos de Distribución de Objetos
+
+Muestreo de Disco de Poisson (Poisson Disk Sampling):
+Concepto: Un algoritmo que produce puntos distribuidos aleatoriamente pero con la garantía de que no estarán más cerca que una distancia mínima especificada. Esto evita el agrupamiento antinatural de la colocación aleatoria uniforme y la apariencia de cuadrícula del ruido simple, resultando en una distribución más orgánica y natural.38 Es ideal para colocar objetos como árboles en un bosque o rocas en un campo.
+Implementación: Se basa en el algoritmo de Bridson, que es eficiente (O(n)).39 Implica mantener una "lista activa" de puntos y generar nuevos candidatos en un anillo a su alrededor, verificando colisiones contra puntos existentes en una cuadrícula de fondo.
+Colocación Basada en Ruido:
+Concepto: Utilizar un mapa de ruido separado para controlar la densidad de los objetos. Se aplica un umbral al valor del ruido para decidir si se coloca un objeto en una ubicación determinada.41
+Caso de Uso: Excelente para crear densidades variables, como parches de bosque denso que se adelgazan hasta convertirse en claros. Se puede combinar con el Muestreo de Disco de Poisson utilizando el valor del ruido para variar el parámetro de distancia mínima del algoritmo de Poisson.
+Colocación Basada en Reglas:
+Concepto: Colocar objetos basándose en reglas lógicas derivadas de las capas de datos generadas.
+Ejemplos: "Colocar robles solo en el bioma de Bosque Templado". "Colocar cactus solo en el bioma de Desierto y en pendientes de menos de 30 grados". "Colocar rocas cerca de los bordes de los acantilados (identificados por altos valores de pendiente en el mapa de alturas)". Esto es esencial para crear ecosistemas coherentes y creíbles.
+
+4.2 Generación Determinista con Sub-Semillas
+
+El Problema: La colocación de objetos debe ser determinista. El mismo árbol debe aparecer exactamente en el mismo lugar cada vez que se genera el mundo con la misma semilla global.
+La Solución: Siembra Jerárquica. No se debe usar un único PRNG para todo el mundo. En su lugar, se genera una "sub-semilla" única y determinista para cada proceso distinto dentro de cada chunk.
+Técnica: Se utiliza una función de hash rápida y no criptográfica para combinar la semilla global con las coordenadas del chunk y otro contexto.
+Ejemplos de Sub-Semillas:
+chunkSeed = hash(globalSeed, chunkX, chunkZ)
+treeSeed = hash(chunkSeed, "trees")
+rockSeed = hash(chunkSeed, "rocks")
+Esto asegura que la colocación de árboles en un chunk sea independiente de la colocación de rocas, y de la colocación de objetos en cualquier otro chunk. Un cambio en el algoritmo de colocación de rocas no alterará la disposición de los árboles.42
+JavaScript
+/**
+ * Genera un hash entero de 32 bits a partir de múltiples entradas.
+ * Es rápido, determinista y no criptográfico.
+ * @param  {...any} inputs - Las entradas a hashear (números, strings).
+ * @returns {number} Un hash entero de 32 bits.
+ */
+function generateDeterministicIntegerHash(...inputs) {
+  let hash = 0;
+  for (const input of inputs) {
+    const str = String(input);
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0; // Forzar a entero de 32 bits
+    }
+  }
+  return hash;
+}
+
+// Uso para generar una sub-semilla para los árboles en un chunk específico
+const treeSeed = generateDeterministicIntegerHash(globalSeed, chunkX, chunkZ, 'trees');
+const treePRNG = new Alea(treeSeed); // Sembrar un PRNG con este valor
+// Ahora usar treePRNG para toda la colocación de árboles en este chunk.
+Una función de hash adecuada se puede derivar de implementaciones comunes como se muestra en la fuente.43
+
+4.3 Integración con Three.js: Datos Abstractos y Renderizado Instanciado
+
+El módulo generador no debe ser responsable de crear geometría de Three.js (THREE.BufferGeometry). En su lugar, debe devolver una lista abstracta de descripciones de objetos. Si el generador creara BufferGeometry directamente, estaría fuertemente acoplado a la librería de renderizado. Esto haría imposible usar el generador en otros contextos, como la validación en el lado del servidor o las pruebas unitarias en Node.js. Devolver una estructura de datos abstracta como ObjectInstance, donde ObjectInstance = { type: 'tree_pine', position, rotation, scale }, desacopla completamente la lógica de generación de la implementación de renderizado. El módulo "visor" es entonces responsable de interpretar estos datos y crear los objetos de Three.js apropiados. Esta separación de responsabilidades es un principio fundamental de una buena arquitectura de software.
+El Problema del Rendimiento: Renderizar miles de árboles o rocas como objetos THREE.Mesh separados resultaría en miles de llamadas de dibujado, destruyendo el rendimiento.21
+La Solución: THREE.InstancedMesh. Esta característica de Three.js está diseñada específicamente para este caso de uso. Permite a la GPU renderizar miles de copias de una única geometría en una sola llamada de dibujado, cada una con su propia transformación (posición, rotación, escala).44
+Flujo de Trabajo:
+El generador produce un array de datos ObjectInstance para un chunk.
+El módulo visor agrupa estas instancias por tipo (e.g., todos los objetos tree_pine).
+Para cada tipo, crea un único THREE.InstancedMesh.
+Itera a través del array ObjectInstance y utiliza instancedMesh.setMatrixAt(i, matrix) para establecer la transformación de cada instancia.
+Este enfoque es la forma más performante de renderizar grandes cantidades de objetos repetidos en WebGL.44
+LOD para Objetos: Los objetos no deben generarse ni renderizarse para chunks distantes. El visor será responsable de decidir una distancia de corte más allá de la cual no solicitará datos de objetos al generador.
+
+V. Optimización y Rendimiento en la Web
+
+Esta sección aborda las limitaciones inherentes a la plataforma web y las estrategias de optimización necesarias para garantizar una experiencia fluida y receptiva.
+
+5.1 Límites del Navegador y el Uso de Web Workers
+
+Límites de Memoria: Los navegadores imponen límites estrictos a la memoria que una sola pestaña puede consumir. Almacenar datos para un mundo grande (cientos de chunks con mapas de altura, biomas y listas de objetos) puede exceder rápidamente estos límites. Es crucial gestionar activamente la memoria, descargando los chunks que ya no están a la vista.
+Bloqueo del Hilo Principal: La generación procedural es una tarea computacionalmente intensiva. Realizarla en el hilo principal de JavaScript, que también es responsable de la renderización y la interacción del usuario, provocaría que la aplicación se congelara por completo durante la generación de nuevos chunks.
+Solución: Web Workers. La solución estándar y más efectiva es delegar todo el pipeline de generación de chunks a uno o más Web Workers.46 Un Web Worker es un hilo de fondo que puede ejecutar scripts sin interferir con la interfaz de usuario.46
+Flujo de Trabajo Conceptual:
+Hilo Principal: El hilo principal (el "visor") determina qué chunk se necesita (basado en la posición del jugador).
+Mensaje al Worker: Envía un mensaje al Web Worker con la configuración de generación (coordenadas del chunk, semilla global). worker.postMessage({ command: 'generateChunk',... }).
+Generación en el Worker: El worker recibe el mensaje y ejecuta todo el pipeline de generación multica-pa. Esta operación puede tardar, pero no afecta la fluidez del hilo principal.48
+Transferencia de Datos: Una vez que el ChunkData está listo, el worker lo envía de vuelta al hilo principal. Como se estableció anteriormente, el uso de TypedArray para los mapas de datos permite que estos sean transferidos como "Objetos Transferibles", lo que es una operación casi instantánea.46
+self.postMessage(chunkData,).
+Recepción en el Hilo Principal: El hilo principal recibe los datos del chunk y procede a crear las mallas de Three.js y a renderizarlo.
+
+5.2 Estrategia de Almacenamiento en Caché (Caching)
+
+Caché LRU (Least Recently Used): No es eficiente generar un chunk desde cero cada vez que entra en el campo de visión. Se debe implementar una caché en memoria para los chunks ya generados. Una caché LRU es ideal para este propósito: mantiene un número fijo de los chunks utilizados más recientemente y descarta los menos recientes cuando se necesita espacio.49
+Implementación: Se puede implementar una clase LRUCache utilizando una combinación de un Map para un acceso rápido (O(1)) y una lista doblemente enlazada para mantener el orden de uso.49
+Tamaño de la Caché: El tamaño de la caché (e.g., 200-500 chunks) es un parámetro crítico que debe ajustarse. Un tamaño mayor reduce la necesidad de regeneración a costa de un mayor uso de memoria.
+Persistencia con IndexedDB: Para una experiencia de usuario persistente entre sesiones, los chunks generados (especialmente aquellos modificados por el jugador) pueden ser serializados y guardados en IndexedDB, una base de datos NoSQL del lado del cliente.52
+Flujo de Trabajo: Cuando un chunk se descarga de la caché LRU, en lugar de descartarlo, se puede guardar en IndexedDB. Al solicitar un chunk, el sistema primero verifica la caché LRU, luego IndexedDB, y solo si no se encuentra en ninguno de los dos, solicita su generación al worker.
+Compresión: Antes de guardar en IndexedDB, los mapas de altura (Float32Array) pueden ser comprimidos para ahorrar espacio. Una técnica eficaz es la cuantización, que consiste en convertir los valores de punto flotante de 32 bits a enteros de 16 bits (Int16Array), mapeando el rango de alturas del mundo al rango de valores del entero. Esto reduce el tamaño de los datos a la mitad con una pérdida de precisión a menudo imperceptible.
+
+5.3 Generación Progresiva y Streaming
+
+Para mejorar aún más la fluidez, la generación no debe ser un proceso monolítico.
+LOD Progresivo: En lugar de esperar a que un chunk de alta resolución esté completamente listo, el sistema puede adoptar un enfoque progresivo.
+El worker genera primero una versión de bajo Nivel de Detalle (LOD) del chunk (e.g., un mapa de alturas de 16x16).
+Estos datos de baja resolución se envían inmediatamente al hilo principal, que puede renderizar una versión simplificada del terreno casi al instante.
+Mientras tanto, el worker continúa trabajando para refinar el chunk a su resolución completa.
+Cuando los datos de alta resolución están listos, se envían al hilo principal, que reemplaza la malla de baja resolución por la de alta resolución.
+Orden de Generación (Streaming): El orden en que se solicitan los chunks es importante. En lugar de cargar filas o columnas enteras, la generación debe ocurrir en una espiral hacia afuera desde la posición actual del jugador. Esto asegura que los chunks más cercanos y más visibles para el jugador se generen y carguen primero, maximizando la calidad visual percibida.
+
+VI. Definición de la API y Formato de Datos
+
+Una API bien definida es crucial para la interoperabilidad y la mantenibilidad del sistema. Esta sección define las interfaces de entrada y salida, así como el patrón de diseño de la API del generador.
+
+6.1 Entrada del Generador: GeneratorConfig
+
+La configuración de entrada debe ser un objeto serializable que contenga todos los parámetros necesarios para generar un mundo de manera determinista.
+
+TypeScript
+
+
+interface BiomeConfig {
+  id: number;
+  name: string;
+  //... otros parámetros específicos del bioma (e.g., colores, tipos de objetos)
+}
+
+interface GeneratorConfig {
+  seed: number | string;
+  chunkSize: number; // e.g., 32, 64, 128
+  worldScale: number; // Metros por unidad de Three.js
+  
+  // Parámetros para las capas de generación
+  heightmapParams: {
+    frequency: number;
+    octaves: number;
+    persistence: number;
+    lacunarity: number;
+    amplitude: number;
+  };
+
+  temperatureParams: {
+    baseTemperature: number; // Temp. a nivel del mar
+    frequency: number;
+    altitudeLapseRate: number; // Cómo la altura afecta la temperatura
+  };
+
+  moistureParams: {
+    frequency: number;
+  };
+
+  // Definiciones de biomas y la tabla de búsqueda
+  biomes: BiomeConfig;
+  biomeLookupTable: number; // [humedad][temperatura] -> biomeId
+}
+
+
+
+6.2 Salida por Chunk: ChunkData
+
+La salida para cada chunk generado debe ser un contenedor de datos desacoplado de cualquier librería de renderizado.
+
+TypeScript
+
+
+interface ObjectInstance {
+  type: string; // e.g., 'tree_pine', 'rock_large'
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number; w: number }; // Cuaternión
+  scale: { x: number; y: number; z: number };
+}
+
+interface ChunkData {
+  coord: { x: number; z: number };
+  heightmap: Float32Array;
+  biomemap: Uint8Array;
+  objects: ObjectInstance;
+  metadata?: { [key: string]: any }; // Para datos adicionales
+}
+
+
+
+6.3 Diseño de la API del Pipeline
+
+Se deben considerar dos patrones principales para la API del generador: el Patrón Builder y la Configuración basada en JSON.
+Patrón Builder: Este patrón permite una construcción de objetos paso a paso mediante métodos encadenados, como generator.addLayer(...).addBiomes(...).generate().54 Es muy expresivo y bueno para la construcción programática y la validación de pasos intermedios.56 Sin embargo, puede ser verboso y el estado de la configuración no es inherentemente serializable.
+Configuración JSON: Este enfoque utiliza un único objeto de configuración (como el GeneratorConfig definido anteriormente) que se pasa al método de generación.
+Recomendación: Se recomienda un enfoque híbrido, con la configuración JSON como el método principal. La razón es que un objeto de configuración JSON es fácilmente serializable. Esto es fundamental para guardar y cargar el estado del mundo, compartir semillas y configuraciones, y para la comunicación con los Web Workers, que solo pueden recibir datos serializables. El Patrón Builder puede ofrecerse como una capa de conveniencia sobre la construcción del objeto de configuración JSON, pero la interfaz principal del generador debe aceptar el objeto de configuración directamente.
+Callbacks de Progreso: La API de generación debe aceptar callbacks opcionales para manejar el progreso y la finalización, lo que es esencial para una arquitectura asíncrona basada en workers.
+
+TypeScript
+
+
+class WorldGenerator {
+  constructor(config: GeneratorConfig) {
+    //...
+  }
+
+  generateChunk(
+    coord: { x: number; z: number },
+    callbacks?: {
+      onProgress?: (progress: number) => void;
+      onComplete: (data: ChunkData) => void;
+      onError?: (error: Error) => void;
+    }
+  ): void {
+    // Lógica para enviar la tarea al Web Worker y manejar los callbacks
+  }
+}
+
+
+
+VII. Estrategias de Pruebas Específicas
+
+Probar un sistema de generación procedural presenta desafíos únicos. Las pruebas deben centrarse en la consistencia, la validez de los datos y la prevención de regresiones visuales.
+
+7.1 Pruebas de Determinismo
+
+El pilar de un sistema procedural robusto es su determinismo: la misma entrada (semilla y configuración) debe producir siempre la misma salida.57
+Estrategia de Prueba:
+Crear un conjunto de pruebas unitarias que llame a la función de generación de un chunk específico (e.g., el chunk en (10, -5)) varias veces (e.g., 100 veces) con la misma GeneratorConfig.
+Almacenar el heightmap del primer resultado.
+Para cada ejecución posterior, comparar el nuevo heightmap con el primero, byte por byte.
+La aserción debe ser que todos los Float32Array resultantes son idénticos.
+Serialización para Comparación: Para comparar los TypedArray, se pueden convertir sus búferes subyacentes (.buffer) a una representación de cadena (e.g., Base64) o comparar los Uint8Array de los búferes directamente para una comparación eficiente.
+
+7.2 Pruebas de Invariantes
+
+Las pruebas de invariantes verifican que la salida del generador siempre cumpla con ciertas reglas y restricciones, independientemente de la semilla.
+Estrategias de Prueba:
+Sin Valores Inválidos: Asegurarse de que ningún mapa de datos (heightmap, etc.) contenga valores NaN o Infinity.
+Rangos de Valores Esperados: Verificar que los valores generados se mantengan dentro de los rangos esperados. Por ejemplo, las alturas deben estar entre los límites definidos del mundo (e.g., [-100, 500]). Los valores de temperatura y humedad normalizados deben estar en el rango ``.
+Validez de Biomas: Asegurarse de que cada punto en el biomemap corresponda a un ID de bioma válido definido en la configuración y que no haya valores undefined o fuera de rango.
+
+7.3 Pruebas de Regresión Visual
+
+Los cambios en los algoritmos de ruido o en las fórmulas de combinación pueden introducir alteraciones visuales sutiles pero no deseadas. Las pruebas de regresión visual automatizan la detección de estos cambios.59
+Estrategia de Prueba:
+Crear un conjunto de pruebas que utilice una semilla y configuración fijas para generar datos de chunks clave.
+Utilizar una librería del lado del servidor como node-canvas para renderizar los mapas de datos (e.g., el heightmap) como imágenes en escala de grises.
+En la primera ejecución, estas imágenes se guardan como "instantáneas" (snapshots) de referencia.
+En ejecuciones posteriores, las nuevas imágenes generadas se comparan, píxel por píxel, con las instantáneas guardadas.
+Si hay una diferencia que supera un umbral de tolerancia, la prueba falla, alertando al desarrollador sobre una regresión visual no intencionada.59 Herramientas como
+jest-image-snapshot pueden integrarse para gestionar este proceso.
+
+VIII. Integración con el Resto del Sistema
+
+El módulo @worldlab/generators no existe en el vacío. Su diseño debe prever una integración fluida con otros componentes clave del ecosistema @worldlab.
+
+8.1 Con @worldlab/physics
+
+Colisionadores de Terreno: El heightmap (Float32Array) generado es la entrada directa para crear un colisionador de tipo Heightfield en motores de física como Cannon.js. El ChunkData debe ser fácilmente convertible a la matriz de datos que espera el motor de física.61
+Metadatos para la Física: El motor de física puede necesitar más que solo la altura. El biomemap puede usarse para proporcionar metadatos por área, como el coeficiente de fricción (e.g., el hielo en un bioma de tundra tiene baja fricción, la arena en un desierto tiene alta fricción) o el material de la superficie para efectos de sonido de impacto. El ChunkData.metadata es el lugar ideal para almacenar esta información precalculada.
+
+8.2 Con @worldlab/events
+
+Arquitectura Orientada a Eventos: El sistema debe responder a eventos para permitir la modificación dinámica del mundo. Se debe adoptar una arquitectura orientada a eventos, donde el generador y el gestor de chunks actúen como "consumidores de eventos".63
+Eventos Clave:
+"regenerateChunk": Un evento que podría ser disparado por una acción del jugador o del sistema (e.g., un evento cataclísmico en el juego) que instruye al gestor de chunks a descartar un chunk existente y solicitar una nueva generación.
+"changeBiome": Un evento que podría modificar los datos de un chunk ya generado, por ejemplo, aplicando un efecto mágico que convierte un área de bosque en desierto. Esto implicaría una regeneración parcial o una modificación directa de los datos del chunk.
+Invalidación de Caché: Cualquier evento que modifique un chunk debe invalidar las entradas correspondientes en la caché LRU y en IndexedDB para asegurar que la versión actualizada se cargue la próxima vez que se necesite.
+
+8.3 Con el Visor (Viewer)
+
+Control de la Generación: El visor es el "productor de eventos" principal. Es responsable de monitorear la posición del jugador y el frustum de la cámara para determinar qué chunks son necesarios. El visor controla cuándo y qué chunks se generan, pero no cómo.65
+Gestión de Memoria: El visor debe monitorear el uso de memoria. Si se acerca a los límites del navegador, puede enviar señales para reducir el tamaño de la caché LRU o para descargar chunks de manera más agresiva.
+Prioridad de Generación: El visor debe gestionar una cola de solicitudes de generación, priorizando los chunks que están directamente en el campo de visión del jugador y siguiendo el patrón de carga en espiral para una experiencia óptima.
+Fuentes citadas
+Perlin noise - Wikipedia, acceso: septiembre 14, 2025, https://en.wikipedia.org/wiki/Perlin_noise
+Perlin Noise: A Procedural Generation Algorithm - Raouf's blog, acceso: septiembre 14, 2025, https://rtouti.github.io/graphics/perlin-noise-algorithm
+Simplex noise - Wikipedia, acceso: septiembre 14, 2025, https://en.wikipedia.org/wiki/Simplex_noise
+Perlin Noise vs. Simplex Noise - Creative Clojure, acceso: septiembre 14, 2025, https://clojurefun.wordpress.com/2012/08/05/perlin-noise-vs-simplex-noise/
+Simplex noise vs Perlin noise - Stack Overflow, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/6439350/simplex-noise-vs-perlin-noise
+simplex - npm search, acceso: septiembre 14, 2025, https://www.npmjs.com/search?q=simplex
+keywords:simplex noise - npm search, acceso: septiembre 14, 2025, https://www.npmjs.com/search?q=keywords:simplex%20noise
+jwagner/simplex-noise.js: A fast simplex noise implementation in Javascript / Typescript. - GitHub, acceso: septiembre 14, 2025, https://github.com/jwagner/simplex-noise.js/
+simplex-noise - NPM, acceso: septiembre 14, 2025, https://www.npmjs.com/package/simplex-noise
+simplex-noise.js - CodeSandbox, acceso: septiembre 14, 2025, https://codesandbox.io/s/simplex-noise-jyv5h
+simplex-noise v4.0.3 Bundlephobia, acceso: septiembre 14, 2025, https://bundlephobia.com/package/simplex-noise@4.0.3
+OpenSimplex noise - Wikipedia, acceso: septiembre 14, 2025, https://en.wikipedia.org/wiki/OpenSimplex_noise
+joshforisha/open-simplex-noise-js: OpenSimplex noise for ... - GitHub, acceso: septiembre 14, 2025, https://github.com/joshforisha/open-simplex-noise-js
+open-simplex-noise v2.5.0 Bundlephobia, acceso: septiembre 14, 2025, https://bundlephobia.com/package/open-simplex-noise
+GitHub - joshforisha/fast-simplex-noise-js, acceso: septiembre 14, 2025, https://github.com/joshforisha/fast-simplex-noise-js
+webvoxel/fast-simplex-noise - NPM, acceso: septiembre 14, 2025, https://www.npmjs.com/package/@webvoxel/fast-simplex-noise
+josephg/noisejs: Javascript 2D Perlin & Simplex noise functions - GitHub, acceso: septiembre 14, 2025, https://github.com/josephg/noisejs
+noisejs - NPM, acceso: septiembre 14, 2025, https://www.npmjs.com/package/noisejs
+Chunk Size Matters - Matt Ambrogi, acceso: septiembre 14, 2025, https://www.mattambrogi.com/posts/chunk-size-matters/
+What Factors Influence Chunk Size? - Metric Coders, acceso: septiembre 14, 2025, https://www.metriccoders.com/post/what-factors-influence-chunk-size
+Performance/draw calls - HTML5 Game Devs Forum, acceso: septiembre 14, 2025, https://www.html5gamedevs.com/topic/12504-performancedraw-calls/
+What's worse for performance, triangles or draw calls? : r/unrealengine - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/unrealengine/comments/ngdwz6/whats_worse_for_performance_triangles_or_draw/
+WebGL drawcalls - Questions - three.js forum, acceso: septiembre 14, 2025, https://discourse.threejs.org/t/webgl-drawcalls/24476
+java - How can I compute which chunk a coordinate is in? - Game ..., acceso: septiembre 14, 2025, https://gamedev.stackexchange.com/questions/94021/how-can-i-compute-which-chunk-a-coordinate-is-in
+World coordinates as float to chunk and pixel coordinates - Stack Overflow, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/35098681/world-coordinates-as-float-to-chunk-and-pixel-coordinates
+Chunk based world generation : r/proceduralgeneration - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/proceduralgeneration/comments/2zjp51/chunk_based_world_generation/
+Creating seamless textures the easy way - cmichel, acceso: septiembre 14, 2025, https://cmichel.io/creating-seamless-textures-the-easy-way
+Matching a chunk of procedurally generated world to a chunk of other world - Game Development Stack Exchange, acceso: septiembre 14, 2025, https://gamedev.stackexchange.com/questions/108942/matching-a-chunk-of-procedurally-generated-world-to-a-chunk-of-other-world
+Procedural Content Generation Overview | Unreal Engine 5.6 Documentation, acceso: septiembre 14, 2025, https://dev.epicgames.com/documentation/en-us/unreal-engine/procedural-content-generation-overview
+Procedural generation - Wikipedia, acceso: septiembre 14, 2025, https://en.wikipedia.org/wiki/Procedural_generation
+Making maps with noise functions - Red Blob Games, acceso: septiembre 14, 2025, https://www.redblobgames.com/maps/terrain-from-noise/
+Combining noise to make a more interesting terrain : r/proceduralgeneration - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/proceduralgeneration/comments/gulol6/combining_noise_to_make_a_more_interesting_terrain/
+Biomes generation and rendering – Fantasy Maps for fun and glory, acceso: septiembre 14, 2025, https://azgaar.wordpress.com/2017/06/30/biomes-generation-and-rendering/
+JavaScript typed arrays - MDN - Mozilla, acceso: septiembre 14, 2025, https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Typed_arrays
+Typed arrays - Binary data in the browser | Articles - web.dev, acceso: septiembre 14, 2025, https://web.dev/articles/webgl-typed-arrays
+When to use Float32Array instead of Array in JavaScript - Stack Overflow, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/15823021/when-to-use-float32array-instead-of-array-in-javascript
+Javascript Typed array vs simple array: performance - Stack Overflow, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/23895583/javascript-typed-array-vs-simple-array-performance
+Poisson-Disc Sampling - Notion, acceso: septiembre 14, 2025, https://available-anaconda-10d.notion.site/Poisson-Disc-Sampling-4eb92c17fb244ef6b90c1e92cfa9ed74
+Maximal Poisson disk sampling: an improved version of Bridson's algorithm, acceso: septiembre 14, 2025, https://extremelearning.com.au/an-improved-version-of-bridsons-algorithm-n-for-poisson-disc-sampling/
+Poisson Disc Sampling. Imagine that you are playing a game and… | by Hemalatha M | Medium, acceso: septiembre 14, 2025, https://medium.com/@hemalatha.psna/implementation-of-poisson-disc-sampling-in-javascript-17665e406ce1
+Noise Functions and Map Generation - Red Blob Games, acceso: septiembre 14, 2025, https://www.redblobgames.com/articles/noise/introduction.html
+Procedural generation from seed steps? : r/proceduralgeneration - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/proceduralgeneration/comments/3d98b6/procedural_generation_from_seed_steps/
+Generate a Hash from string in Javascript - Stack Overflow, acceso: septiembre 14, 2025, https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
+InstancedMesh – three.js docs, acceso: septiembre 14, 2025, https://threejs.org/docs/api/en/objects/InstancedMesh.html
+Three.js Instances: Rendering Multiple Objects Simultaneously - Codrops, acceso: septiembre 14, 2025, https://tympanus.net/codrops/2025/07/10/three-js-instances-rendering-multiple-objects-simultaneously/
+Using Web Workers - Web APIs | MDN, acceso: septiembre 14, 2025, https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers
+Web Workers - Stencil.js, acceso: septiembre 14, 2025, https://stenciljs.com/docs/web-workers
+How web worker works with a practical example - DEV Community, acceso: septiembre 14, 2025, https://dev.to/sachinchaurasiya/how-web-worker-works-with-a-practical-example-c98
+LRU Cache using JavaScript - GeeksforGeeks, acceso: septiembre 14, 2025, https://www.geeksforgeeks.org/javascript/lru-cache-using-javascript/
+lru-cache - NPM, acceso: septiembre 14, 2025, https://www.npmjs.com/package/lru-cache
+LRU Cache using JavaScript - GeeksforGeeks, acceso: septiembre 14, 2025, https://www.geeksforgeeks.org/lru-cache-using-javascript/
+Working with IndexedDB in HTML5 - OpenGenus IQ, acceso: septiembre 14, 2025, https://iq.opengenus.org/working-with-indexeddb/
+Using IndexedDB - Web APIs | MDN - Mozilla, acceso: septiembre 14, 2025, https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API/Using_IndexedDB
+Builder Pattern in JavaScript | CodeSignal Learn, acceso: septiembre 14, 2025, https://codesignal.com/learn/courses/creational-design-patterns-2/lessons/builder-pattern-in-javascript-step-by-step-object-creation
+Builder Pattern Implementation in JavaScript | by Artem Khrienov - Medium, acceso: septiembre 14, 2025, https://medium.com/@artemkhrenov/builder-pattern-implementation-in-javascript-ee9f31765aed
+Understanding the Builder Pattern: Simplifying Object Construction with a Hotel Menu Order Example in C# | by Ravi Patel | Medium, acceso: septiembre 14, 2025, https://medium.com/@ravipatel.it/understanding-the-builder-pattern-simplifying-object-construction-with-a-hotel-menu-order-example-3173e48a4150
+Why Deterministic Test Generation Is Important - Diffblue, acceso: septiembre 14, 2025, https://www.diffblue.com/resources/deterministic-test-generation/
+How to Make Your Game Deterministic (and Why) : r/godot - Reddit, acceso: septiembre 14, 2025, https://www.reddit.com/r/godot/comments/1ix4rcl/how_to_make_your_game_deterministic_and_why/
+Visual Regression Testing | Developer Guide - Nightwatch.js, acceso: septiembre 14, 2025, https://nightwatchjs.org/guide/writing-tests/visual-regression-testing.html
+What is Visual Regression Testing: Technique, Importance | BrowserStack, acceso: septiembre 14, 2025, https://www.browserstack.com/percy/visual-regression-testing
+Heightfield - cannon, acceso: septiembre 14, 2025, https://schteppe.github.io/cannon.js/docs/classes/Heightfield.html
+Cannon.js Heightfield from Imported Mesh - HTML5 Game Devs Forum, acceso: septiembre 14, 2025, https://www.html5gamedevs.com/topic/24944-cannonjs-heightfield-from-imported-mesh/
+Event-Driven Architecture - AWS, acceso: septiembre 14, 2025, https://aws.amazon.com/event-driven-architecture/
+Event-Driven Architecture Style - Azure Architecture Center | Microsoft Learn, acceso: septiembre 14, 2025, https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/event-driven
+Get Object Position in a Three.js Scene Dynamically - JavaScript in Plain English, acceso: septiembre 14, 2025, https://javascript.plainenglish.io/get-object-position-in-a-three-js-scene-dynamically-fcc355edfbad
